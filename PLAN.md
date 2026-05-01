@@ -351,10 +351,11 @@ Claude Code は `claude mcp add ip-mcp --transport sse http://<DEPLOY_HOST>:8765
 | S8 | OAuth 2.1 (DCR + PKCE + マスターパスワード) + サブドメイン公開 (Caddy + Let's Encrypt) | iPhone Claude / claude.ai から OAuth 経由で疎通 |
 | S9 | OAuth Provider の SQLite 永続化 (`SqliteOAuthProvider`、`./data:/app/data` ボリューム) + 同 LAN ヘアピン NAT 回避 (Windows hosts に LAN 直結エントリ) | コンテナ再起動・再ビルド後もクライアント登録・トークンが生き残る (Phase 1.5 の OAuth 部分完了) |
 | S10 | アクセスログ JSONL (`logs/access.jsonl`) + 集計スクリプト (`scripts/summarize_logs.py`) + 運用手順書 ([OPERATIONS.md](OPERATIONS.md)) | 日次クォータ消費が `--days 1` で見える、マスターパスワード rotate 手順が文書化済 (Phase 1.5 完了) |
+| S11 | `jpo_get_patent_documents` の binary ZIP/PDF 対応 (`JpoClient.get_raw` + Content-Type 判定) | 拒絶理由通知書等の小サイズ書類を ZIP バイナリで返すケースで UnicodeDecodeError が出ていたバグを修正。container 内で実 JPO API に対して PK\\x03\\x04 マジックバイト確認済 |
 
 S1〜S6 はローカルで完結。S7 以降は LAN ホストへのデプロイ・公開作業。
 
-**進捗 (2026-05-01)**: S1〜S10 まで完了 = Phase 1A / 1B / 1.5 すべて完了。Phase 2 は未着手。
+**進捗 (2026-05-01)**: S1〜S11 まで完了 = Phase 1A / 1B / 1.5 すべて完了。13 ツールのうち 11 が MCP 経由で end-to-end 確認済。残り 2 件 (OPD family / doc_list) は本日のクォータ枯渇のため翌日に再テスト必要。詳細は [OPERATIONS.md §ツール検証ステータス](OPERATIONS.md#ツール検証ステータス-2026-05-01)。Phase 2 は未着手。
 
 ---
 

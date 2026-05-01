@@ -131,6 +131,31 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --
 
 `scripts/summarize_logs.py --days 1` で消費量を確認。JPO 日次上限 (`statusCode 203`) は当日 0 時にリセットされる。翌日 0 時を過ぎても回復しない場合はログイン認証情報を疑う（`scripts/token_check.py` で確認）。
 
+### ツール検証ステータス (2026-05-01)
+
+実装済 13 ツールの動作確認結果。本番デプロイ済 (`5402756`) に対して `特開2010-228687`（出願 `2009080841` / 株式会社日立製作所）で実 JPO API を叩いた結果。
+
+| # | ツール | 検証 | 経路 | 備考 |
+|---|---|---|---|---|
+| 1 | jpo_convert_patent_number | ✅ | MCP | 番号 3 種を正しく変換 |
+| 2 | jpo_get_patent_progress | ✅ | MCP | simple=true で priority/divisional 省略確認 |
+| 3 | jpo_get_patent_registration | ✅ | MCP | 権利存続中・満了日・年金状況返却 |
+| 4 | jpo_get_patent_citations | ✅ | MCP | 引用 20 件 (検索報告書 + 拒絶理由) |
+| 5 | jpo_get_divisional_apps | ✅ | MCP | 該当なし → 空配列で正常応答 |
+| 6 | jpo_get_priority_apps | ✅ | MCP | 同上 |
+| 7 | jpo_lookup_applicant | ✅ | MCP | コード → 氏名変換 |
+| 8 | jpo_get_jpp_url | ✅ | MCP | J-PlatPat 固定 URL 生成 |
+| 9 | jpo_get_patent_documents | ✅ | container exec | バグ修正後、binary ZIP 1789 バイトを正しく取得 (PK\x03\x04 マジック確認)。MCP 経由の最終確認は OAuth 再認可後に再テスト要 |
+| 10 | jpo_get_opd_family | 🟡 | MCP | `rate_limited_daily` (今日のクォータ枯渇)。エラー応答は構造正常、自動フォールバックなし。**翌日再テスト必要** |
+| 11 | jpo_get_opd_doc_list | 🟡 | MCP | 同上、**翌日再テスト必要** |
+| 12 | jpo_fetch_full_record | ✅ | MCP | 4 サブコール並列、各 statusCode 100 |
+| 13 | external_search_patents_by_keyword | ✅ | MCP | 12057 件ヒット、`source: google_patents_unofficial` |
+
+**未チェック / 保留事項**:
+- 🔄 jpo_get_patent_documents の MCP 経由 end-to-end は claude.ai の OAuth 再認可後に未実施。container 内 `JpoClient.get_raw()` 直叩きでは確認済
+- 🔄 OPD 2 ツール (`#10, #11`) は今日のクォータが枯渇していたため `rate_limited_daily` の構造化エラー応答までしか確認できず。実データ取得経路の動作は翌日（クォータリセット後）に再テスト必要
+- 🔄 OAuth SQLite 永続化の「再起動後もトークン生存」は、今回のデプロイがメモリ持ちトークンの最後の消失イベント（旧コード→新コードへの切替時）。次回以降の再起動・再ビルドでトークン生存を確認できる
+
 ### LAN 内 PC から `https://ipmcp.<domain>.dynv6.net` で繋がらない
 
 ヘアピン NAT が無効。Windows の `C:\Windows\System32\drivers\etc\hosts` に LAN 直結エントリを追加（管理者権限が必要）:
