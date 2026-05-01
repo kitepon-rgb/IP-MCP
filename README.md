@@ -47,7 +47,7 @@ git clone https://github.com/kitepon-rgb/IP-MCP.git ~/ip-mcp     # 初回のみ
 ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --build"
 ```
 
-### Claude Desktop / Code 接続
+### Claude Desktop / Code 接続 (LAN 限定、認証なし)
 
 ```json
 {
@@ -58,6 +58,24 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --
   }
 }
 ```
+
+### iPhone Claude / claude.ai (公開、OAuth 2.1)
+
+リバースプロキシ + サブドメインで公開し、サーバー側で OAuth 2.1 (DCR + PKCE + マスターパスワード認可) を要求する。Custom Connector に URL だけ登録すれば、Claude が自動でクライアント登録 → 認可ページへ。
+
+| 項目 | 値 |
+|---|---|
+| URL | `https://<your-subdomain>.example.com/sse` |
+| OAuth Client ID / Secret | 空欄 (DCR で自動取得) |
+
+サーバー側で必要な環境変数:
+
+```env
+MCP_OAUTH_MASTER_PASSWORD=<24+ chars random>
+MCP_OAUTH_ISSUER_URL=https://<your-subdomain>.example.com
+```
+
+詳細は `PLAN.md §9-§10`。
 
 ## 設計上の重要ルール
 
