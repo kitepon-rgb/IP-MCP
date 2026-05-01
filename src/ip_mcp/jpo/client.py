@@ -68,7 +68,7 @@ class JpoConfig:
     request_timeout: float = 30.0
 
     @classmethod
-    def from_env(cls) -> "JpoConfig":
+    def from_env(cls) -> JpoConfig:
         return cls(
             username=os.getenv("JPO_USERNAME", "").strip(),
             password=os.getenv("JPO_PASSWORD", "").strip(),
@@ -103,7 +103,7 @@ class JpoClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def __aenter__(self) -> "JpoClient":
+    async def __aenter__(self) -> JpoClient:
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:

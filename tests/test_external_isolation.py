@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-
 EXTERNAL_PKG = Path(__file__).resolve().parent.parent / "src" / "ip_mcp" / "tools_external"
 
 
@@ -33,7 +32,13 @@ def _imports_in(file: Path) -> set[str]:
 
 @pytest.mark.parametrize("py_file", list(EXTERNAL_PKG.glob("*.py")))
 def test_external_does_not_import_official_or_jpo_client(py_file: Path) -> None:
-    forbidden_substrings = ("ip_mcp.jpo", "ip_mcp.tools_official", "tools_official", "..jpo", "..tools_official")
+    forbidden_substrings = (
+        "ip_mcp.jpo",
+        "ip_mcp.tools_official",
+        "tools_official",
+        "..jpo",
+        "..tools_official",
+    )
     for module in _imports_in(py_file):
         for forbidden in forbidden_substrings:
             assert forbidden not in module, (

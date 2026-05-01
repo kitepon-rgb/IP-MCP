@@ -8,11 +8,11 @@ Reference: https://ip-data.jpo.go.jp/api_guide/api_reference.html
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class JpoOutcome(str, Enum):
+class JpoOutcome(StrEnum):
     OK = "ok"
     NOT_FOUND = "not_found"
     DAILY_QUOTA_EXCEEDED = "daily_quota_exceeded"

@@ -48,7 +48,10 @@ def register(mcp: FastMCP, client: JpoClient) -> None:
                     "registration": normalize_registration_number,
                 }[kind](value)
             else:
-                return _err("bad_input", f"source_type must be one of {sorted(_VALID_TYPES)} or 'auto'")
+                return _err(
+                    "bad_input",
+                    f"source_type must be one of {sorted(_VALID_TYPES)} or 'auto'",
+                )
         except ValueError as exc:
             return _err("bad_input", str(exc))
 

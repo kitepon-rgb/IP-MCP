@@ -15,8 +15,6 @@ from mcp.server.fastmcp import FastMCP
 from ..jpo.client import JpoClient
 from ..jpo.normalize import (
     normalize_application_number,
-    normalize_publication_number,
-    normalize_registration_number,
     parse_identifier,
 )
 from ._shared import bad_input
