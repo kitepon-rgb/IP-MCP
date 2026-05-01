@@ -12,6 +12,7 @@ dependencies = [
     "anyio>=4.4.0",
     "pydantic>=2.7.0",
     "uvicorn>=0.30.0",
+    "aiosqlite>=0.20.0",
 ]
 
 [project.optional-dependencies]

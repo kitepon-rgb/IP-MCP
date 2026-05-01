@@ -14,6 +14,7 @@ services:
     volumes:
       - ./cache:/app/cache
       - ./logs:/app/logs
+      - ./data:/app/data         # OAuth client/token store (SQLite)
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8765), timeout=2).close()"]
       interval: 60s

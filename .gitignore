@@ -6,6 +6,7 @@
 # Runtime data — bind-mounted into Docker, regenerated per host
 cache/
 logs/
+data/
 
 # Python
 __pycache__/

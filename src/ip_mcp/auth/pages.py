@@ -13,7 +13,7 @@ import logging
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
-from .provider import InMemoryOAuthProvider
+from .provider import SqliteOAuthProvider
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _render(session_id: str, client_name: str, error: str = "") -> str:
     )
 
 
-def make_consent_handlers(provider: InMemoryOAuthProvider):
+def make_consent_handlers(provider: SqliteOAuthProvider):
     """Return ``(get_handler, post_handler)`` for /consent."""
 
     async def consent_get(request: Request):

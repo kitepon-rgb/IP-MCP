@@ -156,6 +156,7 @@
 │  │  Volumes:                                    │  │
 │  │    ./cache  → /app/cache                     │  │
 │  │    ./logs   → /app/logs                      │  │
+│  │    ./data   → /app/data  (OAuth SQLite)      │  │
 │  │  Env: JPO_USERNAME / JPO_PASSWORD            │  │
 │  └──────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────┘
@@ -266,6 +267,7 @@ services:
     volumes:
       - ./cache:/app/cache
       - ./logs:/app/logs
+      - ./data:/app/data           # OAuth クライアント・トークンの SQLite (再起動で消えない)
 ```
 
 ### `.env.example`
@@ -345,8 +347,12 @@ Claude Code は `claude mcp add ip-mcp --transport sse http://<DEPLOY_HOST>:8765
 | S5 | キャッシュ + レートリミッタ + 構造化ログ | 受け入れ基準 8/9 が通る |
 | S6 | 外部キーワード検索ツール（4.2）を `tools_external/` 配下に**独立実装** | 受け入れ基準 7 が通る、かつ `tools_official/` から `tools_external/` への import が 0 |
 | S7 | `<DEPLOY_HOST>` へデプロイ + Claude Desktop / Code 接続確認 | 受け入れ基準 10 が通る |
+| S8 | OAuth 2.1 (DCR + PKCE + マスターパスワード) + サブドメイン公開 (Caddy + Let's Encrypt) | iPhone Claude / claude.ai から OAuth 経由で疎通 |
+| S9 | OAuth Provider の SQLite 永続化 (`SqliteOAuthProvider`、`./data:/app/data` ボリューム) + 同 LAN ヘアピン NAT 回避 (Windows hosts に LAN 直結エントリ) | コンテナ再起動・再ビルド後もクライアント登録・トークンが生き残る (Phase 1.5 の OAuth 部分完了) |
 
-S1〜S6 はローカルで完結。S7 で初めて SSH を使う。
+S1〜S6 はローカルで完結。S7 以降は LAN ホストへのデプロイ・公開作業。
+
+**進捗 (2026-05-01)**: S1〜S9 まで完了。残 Phase 1.5 タスクはアクセスログ / 日次クォータ消費メトリクス化。Phase 2 は未着手。
 
 ---
 
@@ -354,7 +360,7 @@ S1〜S6 はローカルで完結。S7 で初めて SSH を使う。
 
 | リスク | 影響 | 対処 |
 |---|---|---|
-| OAuth Provider がインメモリ (再起動でクライアント・トークン消失) | iPhone 等で再認可が必要になる頻度が高い | Phase 1.5 で SQLite 永続化に置換予定。それまでは「サーバー再起動 → クライアント側で接続を一度削除して再追加」が運用手順。 |
+| ~~OAuth Provider がインメモリ~~ → **解決済 (2026-05-01)**: SQLite 永続化 (`SqliteOAuthProvider`, `./data:/app/data`)。コンテナ再起動・再ビルド後もクライアント登録・アクセス・リフレッシュトークンが生き残る。 | （リスク解消） | （対応不要） |
 | OPD API の新規申請が 2024-08 以降停止中 | OPD 系ツールが既存契約者しか使えない | **2026-05-01 確認済み: ユーザーは既存契約者**（旧 IP プロジェクトの cache に `global_doc_list.json` が `statusCode 203 = 1日上限超過` で記録されている = トークン有効）。OPD ツールは Phase 1 から含めて OK。 |
 | Google Patents XHR が予告なく構造変更/IP ブロック | 外部検索ツール (4.2) が壊れる。**ただし公式ツール群 (4.1) には影響しない**（疎結合のため） | 失敗時は `SearchUnavailableError` を明示返却。公式 API には自動で逃げない。EPO OPS / WIPO PATENTSCOPE への切替を後日検討。 |
 | JPO 認証情報の漏洩 | 利用権剥奪リスク | `.env` を Git 除外、`chmod 600`、ssh 鍵認証のみ、LAN バインド限定。 |
@@ -372,12 +378,15 @@ S1〜S6 はローカルで完結。S7 で初めて SSH を使う。
 
 ---
 
-## 14. 次に着手するもの（このまま実装に入る場合）
+## 14. 次に着手するもの
 
-1. このリポジトリ (`.`) を `git clone https://github.com/kitepon-rgb/IP-MCP.git` で初期化（または `git init` → `git remote add origin ...`）。
-2. `pyproject.toml` / `Dockerfile` / `docker-compose.yml` / `.env.example` / `.gitignore` の枠だけ作る（S1）。
-3. `src/ip_mcp/jpo/client.py` を既存 `jpo_patent_claims_fetch.py:391-477` から移植（S2）。
-4. 最小 2 ツールで MCP として動かす → Claude Desktop で疎通確認（S3）。
-5. 残りツール → デプロイ（S4〜S7）。
+S1〜S9 まで完了済み（2026-05-01 時点）。本リポジトリには動作する実装が入っている: `tools_official/` 12 ツール / `tools_external/` 1 ツール / OAuth 2.1 サーバー (SQLite 永続化) / Compose 構成。LAN 直結（hosts 経由）も疎通済み。
 
-ここまで進めてよければ Auto モードのまま S1〜S3 を一気に実装する。
+**Phase 1.5 残タスク**:
+1. アクセスログ / 日次 JPO クォータ消費のメトリクス化 (`logs/*.jsonl` 統一書き出し + 簡易 weekly summary)
+2. マスターパスワードの rotate 手順整備（現状は `~/.ip-mcp-oauth-password` の手書き更新 + コンテナ再起動 + iPhone 側再認可）
+
+**Phase 2 (未着手)**:
+1. 拒絶理由通知書 PDF の構造化抽出（旧 IP プロジェクト `../IP/web_app.py` のうち OCR / PDF パイプライン部分を移植）
+2. AI レビューパイプライン（同上から移植）
+3. EPO OPS / WIPO PATENTSCOPE 補完（外部キーワード検索の冗長化、`tools_external/` 内に独立追加）

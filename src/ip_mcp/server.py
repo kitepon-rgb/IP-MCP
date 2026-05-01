@@ -65,16 +65,19 @@ def build_server() -> tuple[FastMCP, JpoClient]:
     # well-known metadata endpoints. We add /consent on top via custom_route.
     master_password = os.getenv("MCP_OAUTH_MASTER_PASSWORD", "").strip()
     issuer_url = os.getenv("MCP_OAUTH_ISSUER_URL", "").strip()
+    db_path = os.getenv("MCP_OAUTH_DB_PATH", "/app/data/oauth.db").strip()
     auth_provider = None
     auth_settings = None
     if master_password and issuer_url:
         from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 
-        from .auth.provider import InMemoryOAuthProvider
+        from .auth.provider import SqliteOAuthProvider
 
         consent_url = f"{issuer_url.rstrip('/')}/consent"
-        auth_provider = InMemoryOAuthProvider(
-            master_password=master_password, consent_url=consent_url
+        auth_provider = SqliteOAuthProvider(
+            master_password=master_password,
+            consent_url=consent_url,
+            db_path=db_path,
         )
         auth_settings = AuthSettings(
             issuer_url=issuer_url,

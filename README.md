@@ -73,7 +73,11 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --
 ```env
 MCP_OAUTH_MASTER_PASSWORD=<24+ chars random>
 MCP_OAUTH_ISSUER_URL=https://<your-subdomain>.example.com
+# 任意: SQLite ファイルの保存先 (デフォルト = /app/data/oauth.db)
+# MCP_OAUTH_DB_PATH=/app/data/oauth.db
 ```
+
+OAuth で登録された DCR クライアントと発行済みアクセス・リフレッシュトークンは SQLite ファイル (`/app/data/oauth.db`) に保存され、コンテナ再起動・再ビルド後も生き残ります。Compose のボリューム `./data:/app/data` でホストにバインドマウントするのでホスト側で `data/` ディレクトリは自動生成されます。
 
 詳細は `PLAN.md §9-§10`。
 
