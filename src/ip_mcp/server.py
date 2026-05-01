@@ -64,8 +64,8 @@ def build_server() -> tuple[FastMCP, JpoClient]:
     client = JpoClient(config=config)
 
     # Register Phase 1A tools — official JPO API only.
-    # tools_external/* will be wired in S6 (separate registration to keep
-    # the import boundary visible).
+    # The two registration calls (tools_official.* and tools_external.*) are
+    # kept deliberately separate so the boundary is visible in code review.
     tool_convert.register(mcp, client)
     tool_progress.register(mcp, client)
     tool_registration.register(mcp, client)
@@ -76,6 +76,11 @@ def build_server() -> tuple[FastMCP, JpoClient]:
     tool_jpp_url.register(mcp, client)
     tool_opd.register(mcp, client)              # auto-skips when JPO_ENABLE_OPD=0
     tool_fetch_full_record.register(mcp, client)
+
+    # Register Phase 1B tools — external sources, independent module.
+    # tools_external.register() takes NO JpoClient (intentional: zero coupling).
+    from .tools_external import google_patents_search as tool_external_search
+    tool_external_search.register(mcp)          # auto-skips when EXTERNAL_GOOGLE_PATENTS_ENABLED=0
 
     return mcp, client
 
