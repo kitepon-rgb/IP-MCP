@@ -13,17 +13,15 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
-COPY pyproject.toml ./
-RUN uv pip install --system --no-cache .
-
-# Copy source last
+# Bring in metadata + lockfile + readme + source, then install in one step
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+RUN uv pip install --system --no-cache .
 
 EXPOSE 8765
 
-# Healthcheck queries the MCP server's /healthz route (added in server.py)
+# Healthcheck: TCP listen probe via stdlib socket (no curl/healthz route needed)
 HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8765/healthz || exit 1
+    CMD python -c "import socket; socket.create_connection(('127.0.0.1', 8765), timeout=2).close()" || exit 1
 
 CMD ["python", "-m", "ip_mcp.server"]
