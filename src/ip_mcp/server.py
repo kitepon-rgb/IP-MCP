@@ -57,9 +57,15 @@ def build_server() -> tuple[FastMCP, JpoClient]:
 
     host = os.getenv("MCP_HOST", "0.0.0.0")
     port = int(os.getenv("MCP_PORT", "8765"))
+    # Base path under which the SSE / messages endpoints are mounted.
+    # Empty by default (server is reachable at root). Set MCP_MOUNT_PATH=/ip-mcp
+    # when the server sits behind a reverse proxy that adds a path prefix
+    # (so the URL handed to clients in the SSE 'endpoint' event matches the
+    # public-facing path).
+    mount_path = os.getenv("MCP_MOUNT_PATH", "").rstrip("/")
 
-    # FastMCP exposes host/port via settings — passed at construction time.
-    mcp = FastMCP("ip-mcp", host=host, port=port)
+    # FastMCP exposes host/port/mount_path via settings — passed at construction.
+    mcp = FastMCP("ip-mcp", host=host, port=port, mount_path=mount_path or "/")
 
     client = JpoClient(config=config)
 
