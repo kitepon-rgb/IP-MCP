@@ -19,6 +19,8 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 
+from ..access_log import log_call
+
 log = logging.getLogger(__name__)
 
 GOOGLE_PATENTS_XHR_URL = "https://patents.google.com/xhr/query"
@@ -188,9 +190,17 @@ def register(mcp: FastMCP) -> None:
             assignee=assignee,
             ipc=ipc,
         )
+        started = time.perf_counter()
         try:
             data = await _do_search(params)
         except SearchUnavailableError as exc:
+            log_call(
+                source="google_patents_unofficial",
+                endpoint="external_search_patents_by_keyword",
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                outcome="search_unavailable",
+                error=str(exc),
+            )
             return {
                 "ok": False,
                 "source": "google_patents_unofficial",
@@ -203,6 +213,14 @@ def register(mcp: FastMCP) -> None:
                 ),
             }
         except httpx.HTTPStatusError as exc:
+            log_call(
+                source="google_patents_unofficial",
+                endpoint="external_search_patents_by_keyword",
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                outcome="http_error",
+                status_code=str(exc.response.status_code),
+                error=str(exc),
+            )
             return {
                 "ok": False,
                 "source": "google_patents_unofficial",
@@ -210,6 +228,12 @@ def register(mcp: FastMCP) -> None:
                 "status_code": exc.response.status_code,
                 "message": str(exc),
             }
+        log_call(
+            source="google_patents_unofficial",
+            endpoint="external_search_patents_by_keyword",
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+            outcome="ok",
+        )
         return {
             "ok": True,
             "source": "google_patents_unofficial",

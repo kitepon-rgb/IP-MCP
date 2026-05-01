@@ -8,6 +8,7 @@ LAN 内デプロイ専用 (`<DEPLOY_HOST>:8765`)。Python 3.12 + FastMCP + httpx
 
 - **[PLAN.md](PLAN.md)** — 設計計画書（アーキテクチャ・全ツール一覧・段階計画）
 - **[CLAUDE.md](CLAUDE.md)** — Claude Code 向けの操作ガイド（譲れない設計規則・JPO API の罠）
+- **[OPERATIONS.md](OPERATIONS.md)** — 運用手順（アクセスログ集計・マスターパスワード変更・トラブルシュート）
 
 ## プレースホルダの読み替え
 

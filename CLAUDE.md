@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 公開構成: `ipmcp.<domain>.dynv6.net` (Caddy + Let's Encrypt) → `<DEPLOY_HOST>:8765` → Docker コンテナ。同 LAN 内からは Windows hosts に `<DEPLOY_HOST> ipmcp.<domain>.dynv6.net` を入れることでヘアピン NAT を回避。
 
-**Phase 1.5 残タスク**: アクセスログ / 日次クォータ消費メトリクス化、マスターパスワード rotate 手順整備。
+**Phase 1.5 完了**: OAuth 永続化 / ヘアピン NAT 回避 / アクセスログ JSONL (`logs/access.jsonl`) + 集計スクリプト (`scripts/summarize_logs.py`) / マスターパスワード rotate 手順 ([OPERATIONS.md](OPERATIONS.md))。
 **Phase 2 (未着手)**: 拒絶理由通知書 PDF 構造化、AI レビューパイプライン、EPO OPS / WIPO PATENTSCOPE 補完。
 
 `PLAN.md` は設計計画書として継続維持中（§11 段階表に進捗、§12 リスク表で完了済リスクを取り消し済）。

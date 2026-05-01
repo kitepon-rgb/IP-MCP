@@ -11,10 +11,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass
 
 import httpx
 
+from ..access_log import log_call
 from .rate_limiter import RateLimiter, domestic_limiter, opd_limiter
 from .status_codes import JpoOutcome, JpoResultEnvelope, parse_envelope
 
@@ -115,7 +117,35 @@ class JpoClient:
           - statusCode 210 (invalid token) → re-acquire token, one retry
           - statusCode 303 (server busy)   → exponential backoff, up to 3 tries
         Other failures bubble up as JpoResultEnvelope (caller decides).
+
+        Every terminal call (success or final failure) writes one line to the
+        access log so daily quota consumption can be summarized externally.
         """
+        started = time.perf_counter()
+        try:
+            envelope = await self._get_json_inner(path, opd=opd)
+        except Exception as exc:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            log_call(
+                source="jpo_official",
+                endpoint=path,
+                elapsed_ms=elapsed_ms,
+                outcome="exception",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        log_call(
+            source="jpo_official",
+            endpoint=path,
+            elapsed_ms=elapsed_ms,
+            outcome=envelope.outcome.value,
+            status_code=envelope.status_code or None,
+            remain_today=envelope.remain_access_count,
+        )
+        return envelope
+
+    async def _get_json_inner(self, path: str, *, opd: bool) -> JpoResultEnvelope:
         limiter = self._opd_limiter if opd else self._domestic_limiter
         url = self._build_url(path)
 
