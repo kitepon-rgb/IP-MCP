@@ -121,6 +121,18 @@ Returns `{"source": "google_patents_unofficial"}`. **Never falls back to JPO on 
 
 ---
 
+## Rate limits (operations)
+
+The official JPO API delegates self-throttling responsibility to the operator:
+
+- Per-minute rate: `/api/patent/*` is **10 req/min**, `/opdapi/*` is **5 req/min** (OPD is counted separately on its own bucket).
+- Daily quota: 30–800/day per endpoint (national-API quotas were doubled in March 2026). The authoritative live counter is `result.remainAccessCount` returned on every response.
+- `jpo_fetch_full_record` fans out to **4 official endpoints in parallel**, so one call consumes 1 unit from each of 4 separate daily quotas (not 4 from the same quota). The bottleneck is whichever quota is lowest.
+
+For the tool-to-endpoint mapping and operational thresholds, see [OPERATIONS.md §JPO API レート制約とクォータ](OPERATIONS.md#jpo-api-レート制約とクォータ) (Japanese).
+
+---
+
 ## Docs
 
 - 📐 [PLAN.md](PLAN.md) — Design plan (architecture, full tool list, phased plan) [JP]

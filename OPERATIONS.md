@@ -43,6 +43,44 @@ latest JPO remainAccessCount per endpoint:
 
 `--days 7` で 1 週間、`--days 30` で 1 ヶ月分を集計。`remain=...` 列で各エンドポイントの最新残量が確認できる。日次上限が 30〜800/日（エンドポイント別）なので、ここが小さくなっていたらクォータ消費過多のサイン。
 
+### JPO API レート制約とクォータ
+
+JPO 公式 API は自主制御責任を運用者に課している。違反した場合は `statusCode 303`（一時的な高負荷）または `statusCode 203`（日次上限）が返り、当該エンドポイントは一時的または当日中アクセス不能になる。
+
+**分次レート（自主制御）**:
+
+- `/api/patent/*` 系: **10 req/min**
+- `/opdapi/*` 系: **5 req/min**（OPD は別系統で別カウント）
+
+クライアント側のスライディングウィンドウで制御する。違反検知は `statusCode 303` で再試行可（指数バックオフ、同一エンドポイント内のみ）。
+
+**日次クォータ**:
+
+エンドポイントごとに 30〜800/日の幅で異なる（2026 年 3 月から国内系は 2 倍緩和済）。具体値は JPO 仕様書に数値として明記されておらず、各レスポンスの `result.remainAccessCount` が実数の信頼ソース。`scripts/summarize_logs.py` の `latest JPO remainAccessCount per endpoint` 列で確認できる。
+
+**ツール → エンドポイント マッピング**:
+
+| ツール | エンドポイント | 分次 | 備考 |
+|---|---|---|---|
+| `jpo_convert_patent_number` | `/api/patent/v1/case_number_reference/...` | 10/min | |
+| `jpo_get_patent_progress` | `/api/patent/v1/app_progress/...` | 10/min | |
+| `jpo_get_patent_registration` | `/api/patent/v1/registration_info/...` | 10/min | |
+| `jpo_get_patent_citations` | `/api/patent/v1/cite_doc_info/...` | 10/min | |
+| `jpo_get_divisional_apps` | `/api/patent/v1/divisional_app_info/...` | 10/min | |
+| `jpo_get_priority_apps` | `/api/patent/v1/priority_right_app_info/...` | 10/min | |
+| `jpo_lookup_applicant` | `/api/patent/v1/applicant_attorney[_cd]/...` | 10/min | 完全一致のみ |
+| `jpo_get_patent_documents` | `/api/patent/v1/app_doc_cont_*/...` | 10/min | binary ZIP / signed URL |
+| `jpo_get_jpp_url` | （J-PlatPat 静的 URL 生成、API を呼ばない） | — | クォータ消費なし |
+| `jpo_get_opd_family` | `/opdapi/v1/family/...` | **5/min** | 別系統 |
+| `jpo_get_opd_doc_list` | `/opdapi/v1/global_doc_list/...` | **5/min** | 別系統 |
+| `jpo_fetch_full_record` | 上の 4 エンドポイント（`case_number_reference` + `app_progress` + `registration_info` + `cite_doc_info`）を**並列**で叩く | 10/min × 4 並列 | **1 コール = 4 つの別クォータから 1 ずつ消費**。ボトルネックは最低クォータのエンドポイント |
+
+**`jpo_fetch_full_record` の運用上の注意**:
+
+- 1 コール = 4 つのエンドポイントの日次クォータをそれぞれ 1 ずつ消費する（同一クォータから 4 ではない）。
+- 「N 件の特許をまとめて引きたい」要求は、ツールを N 回呼ぶ = 4×N 回の API コールを発生させる。当日のクォータ消費量を見誤りやすい。
+- 残量が小さいエンドポイントが当日中に枯渇する可能性がある。連続実行する前に `scripts/summarize_logs.py --days 1` で各エンドポイントの最新 `remain=` を確認するのが安全。経験則として「いずれかが 200 以下に落ちたら `fetch_full_record` を控える」が安全側。
+
 ### ログのローテーション
 
 `access.jsonl` は append-only。サイズが大きくなったら手動でローテーションする:

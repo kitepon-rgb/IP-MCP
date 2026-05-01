@@ -169,6 +169,18 @@ MCP_OAUTH_ISSUER_URL=https://<your-subdomain>.example.com
 
 ---
 
+## レート制約（運用上の注意）
+
+JPO 公式 API は自主制御責任を運用者に課している:
+
+- 分次レート: `/api/patent/*` は **10 req/min**、`/opdapi/*` は **5 req/min**（OPD は別系統で別カウント）
+- 日次クォータ: エンドポイントごとに 30〜800/日（2026 年 3 月から国内系は 2 倍緩和済）。実残量は各レスポンスの `result.remainAccessCount` が信頼ソース
+- `jpo_fetch_full_record` は内部で **4 つの公式エンドポイントを並列**で叩くため、1 コール = 4 つの別々の日次クォータから 1 ずつ消費する（同一クォータから 4 ではない）
+
+ツールごとのエンドポイント対応表と、運用上の閾値の感覚は [OPERATIONS.md §JPO API レート制約とクォータ](OPERATIONS.md#jpo-api-レート制約とクォータ) を参照。
+
+---
+
 ## ドキュメント
 
 - 📐 [PLAN.md](PLAN.md) — 設計計画書（アーキテクチャ・全ツール一覧・段階計画）

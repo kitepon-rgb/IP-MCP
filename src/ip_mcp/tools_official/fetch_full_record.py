@@ -42,8 +42,11 @@ def register(mcp: FastMCP, client: JpoClient) -> None:
             "(1) number cross-reference, (2) full examination progress, "
             "(3) registration / right status, (4) cited documents. "
             "Each sub-result reports its own status, so partial success is visible. "
-            "All four calls run concurrently against the official JPO API; "
-            "this consumes ~4 of the daily quota per call. Data freshness: daily."
+            "All four calls run concurrently against the official JPO API. "
+            "Quota cost: 1 call from each of 4 separate daily quotas "
+            "(case_number_reference + app_progress + registration_info + cite_doc_info); "
+            "the bottleneck is whichever quota is lowest. "
+            "Data freshness: daily."
         ),
     )
     async def jpo_fetch_full_record(value: str) -> dict[str, Any]:
