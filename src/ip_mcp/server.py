@@ -57,15 +57,55 @@ def build_server() -> tuple[FastMCP, JpoClient]:
 
     host = os.getenv("MCP_HOST", "0.0.0.0")
     port = int(os.getenv("MCP_PORT", "8765"))
-    # Base path under which the SSE / messages endpoints are mounted.
-    # Empty by default (server is reachable at root). Set MCP_MOUNT_PATH=/ip-mcp
-    # when the server sits behind a reverse proxy that adds a path prefix
-    # (so the URL handed to clients in the SSE 'endpoint' event matches the
-    # public-facing path).
     mount_path = os.getenv("MCP_MOUNT_PATH", "").rstrip("/")
 
-    # FastMCP exposes host/port/mount_path via settings — passed at construction.
-    mcp = FastMCP("ip-mcp", host=host, port=port, mount_path=mount_path or "/")
+    # ----- OAuth setup (optional) -----
+    # When MCP_OAUTH_MASTER_PASSWORD + MCP_OAUTH_ISSUER_URL are both set,
+    # the SDK auto-generates /authorize, /token, /register, /revoke, and the
+    # well-known metadata endpoints. We add /consent on top via custom_route.
+    master_password = os.getenv("MCP_OAUTH_MASTER_PASSWORD", "").strip()
+    issuer_url = os.getenv("MCP_OAUTH_ISSUER_URL", "").strip()
+    auth_provider = None
+    auth_settings = None
+    if master_password and issuer_url:
+        from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+
+        from .auth.provider import InMemoryOAuthProvider
+
+        consent_url = f"{issuer_url.rstrip('/')}/consent"
+        auth_provider = InMemoryOAuthProvider(
+            master_password=master_password, consent_url=consent_url
+        )
+        auth_settings = AuthSettings(
+            issuer_url=issuer_url,
+            resource_server_url=issuer_url,
+            client_registration_options=ClientRegistrationOptions(enabled=True),
+        )
+        log.info("OAuth 2.1 enabled, issuer=%s", issuer_url)
+    elif master_password or issuer_url:
+        log.warning(
+            "MCP_OAUTH_MASTER_PASSWORD and MCP_OAUTH_ISSUER_URL must BOTH be set "
+            "to enable OAuth — running without authentication"
+        )
+
+    mcp_kwargs: dict[str, object] = {
+        "host": host,
+        "port": port,
+        "mount_path": mount_path or "/",
+    }
+    if auth_provider is not None and auth_settings is not None:
+        mcp_kwargs["auth_server_provider"] = auth_provider
+        mcp_kwargs["auth"] = auth_settings
+
+    mcp = FastMCP("ip-mcp", **mcp_kwargs)
+
+    # Register the OAuth consent page (only when OAuth is enabled).
+    if auth_provider is not None:
+        from .auth.pages import make_consent_handlers
+
+        consent_get, consent_post = make_consent_handlers(auth_provider)
+        mcp.custom_route("/consent", methods=["GET"])(consent_get)
+        mcp.custom_route("/consent", methods=["POST"])(consent_post)
 
     client = JpoClient(config=config)
 
