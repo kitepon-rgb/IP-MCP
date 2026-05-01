@@ -1,0 +1,47 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Runtime data — bind-mounted into Docker, regenerated per host
+cache/
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# uv
+.uv/
+
+# Local Compose override (host-specific bind addresses, real LAN IP, etc.)
+docker-compose.override.yml
+
+# Local Claude Code config — contains absolute paths with the local OS username
+.claude/
+.spotter/
+
+# VS Code workspace tasks — same reason (absolute paths)
+.vscode/
+
+# JPO upstream reference assets — kept locally, not redistributed
+# (license unclear; fetch fresh from https://ip-data.jpo.go.jp/api_guide/api_reference.js)
+api_reference.js
+api_reference.json
+jpo_reference.html
+
+# IDE / OS
+.vscode/*.local.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Working notes captured by Excalidraw
+excalidraw.log

@@ -1,0 +1,163 @@
+"""Async HTTP client for the JPO 特許情報取得API.
+
+- OAuth2 Resource Owner Password Grant (token TTL 1h, refresh TTL 8h)
+- Auto token refresh on 401 / statusCode 210 (one retry, same source)
+- Exponential backoff on statusCode 303 (server busy, same source)
+- NO automatic fallback to other data sources — see CLAUDE.md
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+from dataclasses import dataclass
+
+import httpx
+
+from .rate_limiter import RateLimiter, domestic_limiter, opd_limiter
+from .status_codes import JpoOutcome, JpoResultEnvelope, parse_envelope
+
+log = logging.getLogger(__name__)
+
+DEFAULT_API_BASE = "https://ip-data.jpo.go.jp"
+DEFAULT_AUTH_URL = "https://ip-data.jpo.go.jp/auth/token"
+
+_BUSY_RETRY_DELAYS = (1.0, 3.0, 9.0)  # seconds, total ≈ 13s
+
+
+@dataclass
+class JpoConfig:
+    username: str = ""
+    password: str = ""
+    pre_issued_token: str = ""
+    api_base: str = DEFAULT_API_BASE
+    auth_url: str = DEFAULT_AUTH_URL
+    request_timeout: float = 30.0
+
+    @classmethod
+    def from_env(cls) -> "JpoConfig":
+        return cls(
+            username=os.getenv("JPO_USERNAME", "").strip(),
+            password=os.getenv("JPO_PASSWORD", "").strip(),
+            pre_issued_token=os.getenv("JPO_TOKEN", "").strip(),
+            api_base=os.getenv("JPO_API_BASE", DEFAULT_API_BASE).rstrip("/"),
+            auth_url=os.getenv("JPO_AUTH_TOKEN_URL", DEFAULT_AUTH_URL),
+        )
+
+    @property
+    def has_credentials(self) -> bool:
+        return bool(self.pre_issued_token or (self.username and self.password))
+
+
+class JpoClient:
+    """Reusable async client. One instance per process is enough."""
+
+    def __init__(
+        self,
+        config: JpoConfig | None = None,
+        *,
+        domestic: RateLimiter | None = None,
+        opd: RateLimiter | None = None,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self.config = config or JpoConfig.from_env()
+        self._domestic_limiter = domestic or domestic_limiter()
+        self._opd_limiter = opd or opd_limiter()
+        self._http = http_client or httpx.AsyncClient(timeout=self.config.request_timeout)
+        self._token: str = self.config.pre_issued_token
+        self._token_lock = asyncio.Lock()
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def __aenter__(self) -> "JpoClient":
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.aclose()
+
+    # ---- Auth ----------------------------------------------------------
+
+    async def _refresh_token(self, *, force: bool = False) -> str:
+        async with self._token_lock:
+            if self._token and not force:
+                return self._token
+            if not self.config.username or not self.config.password:
+                if self._token:
+                    return self._token
+                raise RuntimeError(
+                    "JPO_USERNAME/JPO_PASSWORD or JPO_TOKEN must be set in environment"
+                )
+            log.info("requesting new JPO access token (password grant)")
+            response = await self._http.post(
+                self.config.auth_url,
+                data={
+                    "grant_type": "password",
+                    "username": self.config.username,
+                    "password": self.config.password,
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+            token = str(payload.get("access_token", "")).strip()
+            if not token:
+                raise RuntimeError(f"JPO auth returned no access_token: {payload!r}")
+            self._token = token
+            return token
+
+    # ---- GET (JSON) ----------------------------------------------------
+
+    async def get_json(self, path: str, *, opd: bool = False) -> JpoResultEnvelope:
+        """GET ``path`` (relative to api_base) and return a parsed envelope.
+
+        Retries inside the same source only:
+          - statusCode 210 (invalid token) → re-acquire token, one retry
+          - statusCode 303 (server busy)   → exponential backoff, up to 3 tries
+        Other failures bubble up as JpoResultEnvelope (caller decides).
+        """
+        limiter = self._opd_limiter if opd else self._domestic_limiter
+        url = self._build_url(path)
+
+        for attempt, delay in enumerate(_BUSY_RETRY_DELAYS, start=1):
+            await limiter.acquire()
+            envelope = await self._do_get(url, refresh_on_invalid_token=True)
+            if envelope.outcome is not JpoOutcome.SERVER_BUSY:
+                return envelope
+            log.warning(
+                "JPO server busy (303), backing off %.1fs (attempt %d/%d) url=%s",
+                delay, attempt, len(_BUSY_RETRY_DELAYS), url,
+            )
+            await asyncio.sleep(delay)
+
+        await limiter.acquire()
+        return await self._do_get(url, refresh_on_invalid_token=True)
+
+    async def _do_get(self, url: str, *, refresh_on_invalid_token: bool) -> JpoResultEnvelope:
+        token = await self._refresh_token()
+        response = await self._http.get(url, headers={"Authorization": f"Bearer {token}"})
+
+        # Token rejected at HTTP layer
+        if response.status_code == 401 and refresh_on_invalid_token:
+            log.info("JPO returned HTTP 401, refreshing token and retrying once")
+            await self._refresh_token(force=True)
+            return await self._do_get(url, refresh_on_invalid_token=False)
+
+        envelope = parse_envelope(response.json() if response.content else {})
+
+        # Token rejected at envelope layer (statusCode 210)
+        if envelope.outcome is JpoOutcome.INVALID_TOKEN and refresh_on_invalid_token:
+            log.info("JPO returned statusCode 210, refreshing token and retrying once")
+            await self._refresh_token(force=True)
+            return await self._do_get(url, refresh_on_invalid_token=False)
+
+        return envelope
+
+    # ---- helpers -------------------------------------------------------
+
+    def _build_url(self, path: str) -> str:
+        if path.startswith(("http://", "https://")):
+            return path
+        if not path.startswith("/"):
+            path = "/" + path
+        return f"{self.config.api_base}{path}"

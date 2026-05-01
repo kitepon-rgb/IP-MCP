@@ -1,0 +1,22 @@
+services:
+  ip-mcp:
+    build: .
+    image: ip-mcp:latest
+    container_name: ip-mcp
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Default = localhost only (safe for any clone of this public repo).
+    # On the deploy host, override with docker-compose.override.yml to bind
+    # to the LAN interface (e.g. "192.0.2.10:8765:8765"). See README.md.
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./cache:/app/cache
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/healthz"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

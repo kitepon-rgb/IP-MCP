@@ -1,0 +1,9 @@
+# Copy to docker-compose.override.yml on the deploy host (gitignored).
+# Compose merges this with docker-compose.yml automatically.
+# Use it to bind the MCP server to a specific LAN interface so clients on
+# other machines on the home LAN can reach it.
+
+services:
+  ip-mcp:
+    ports:
+      - "192.0.2.10:8765:8765"   # ← replace 192.0.2.10 with your LAN IP
