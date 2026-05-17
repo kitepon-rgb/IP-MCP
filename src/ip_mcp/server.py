@@ -140,12 +140,16 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     mcp, _client = build_server()
+    transport = os.getenv("MCP_TRANSPORT", "sse").strip() or "sse"
+    if transport not in {"sse", "streamable-http"}:
+        raise ValueError("MCP_TRANSPORT must be sse or streamable-http")
     log.info(
-        "starting IP-MCP on %s:%s (transport=sse)",
+        "starting IP-MCP on %s:%s (transport=%s)",
         os.getenv("MCP_HOST", "0.0.0.0"),
         os.getenv("MCP_PORT", "8765"),
+        transport,
     )
-    mcp.run(transport="sse")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":
