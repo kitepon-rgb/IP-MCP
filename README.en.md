@@ -78,7 +78,7 @@ chmod 600 .env
 docker compose up -d --build
 ```
 
-For LAN-wide deployment, create `docker-compose.override.yml` to bind to your LAN interface, then point Claude Desktop / Code at `http://<HOST>:8765/sse`.
+For LAN-wide deployment, create `docker-compose.override.yml` to bind to your LAN interface, then point SSE clients at `http://<HOST>:8765/sse`. Codex direct HTTP MCP clients use `/mcp`; set `MCP_TRANSPORT=both` when one deployment must serve both `/mcp` and `/sse`.
 
 For public exposure (iPhone Claude / claude.ai), set up a reverse proxy with Let's Encrypt and supply both `MCP_OAUTH_MASTER_PASSWORD` and `MCP_OAUTH_ISSUER_URL`. The server requires OAuth 2.1 (DCR + PKCE + master-password consent). Issued tokens persist to SQLite and survive container restarts.
 

@@ -1,16 +1,19 @@
 """IP-MCP server entry point.
 
 Run as a module (``python -m ip_mcp.server``) or via the script entry
-``ip-mcp`` defined in pyproject.toml. Uses Server-Sent Events transport so
-clients on the LAN can connect over HTTP.
+``ip-mcp`` defined in pyproject.toml. Uses HTTP transports so clients on the
+LAN can connect over MCP.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from typing import Literal, cast
 
 from mcp.server.fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.routing import BaseRoute
 
 from .jpo.client import JpoClient, JpoConfig
 from .tools_official import (
@@ -45,6 +48,9 @@ from .tools_official import (
 )
 
 log = logging.getLogger(__name__)
+Transport = Literal["sse", "streamable-http", "both"]
+FastMcpTransport = Literal["sse", "streamable-http"]
+VALID_TRANSPORTS: set[Transport] = {"sse", "streamable-http", "both"}
 
 
 def build_server() -> tuple[FastMCP, JpoClient]:
@@ -134,22 +140,85 @@ def build_server() -> tuple[FastMCP, JpoClient]:
     return mcp, client
 
 
+def normalize_route_path(path: str) -> str:
+    if path == "/":
+        return path
+    return path.rstrip("/")
+
+
+def is_sse_transport_route(route: BaseRoute, transport_paths: set[str]) -> bool:
+    route_path = getattr(route, "path", None)
+    if not isinstance(route_path, str):
+        return False
+    return normalize_route_path(route_path) in transport_paths
+
+
+def build_dual_transport_app(mcp: FastMCP) -> Starlette:
+    """Build a single Starlette app that serves Streamable HTTP and SSE MCP.
+
+    FastMCP exposes one transport per app. Some clients still probe `/sse`,
+    while Codex direct HTTP MCP uses `/mcp`, so production needs both routes
+    from the same OAuth issuer and token database.
+    """
+
+    streamable_app = mcp.streamable_http_app()
+    sse_app = mcp.sse_app()
+    sse_transport_paths = {
+        normalize_route_path(mcp.settings.sse_path),
+        normalize_route_path(mcp.settings.message_path),
+    }
+    routes = list(streamable_app.routes)
+    routes.extend(
+        route for route in sse_app.routes if is_sse_transport_route(route, sse_transport_paths)
+    )
+    return Starlette(
+        debug=mcp.settings.debug,
+        routes=routes,
+        middleware=list(streamable_app.user_middleware),
+        lifespan=lambda app: mcp.session_manager.run(),
+    )
+
+
+async def run_dual_transport_async(mcp: FastMCP) -> None:  # pragma: no cover
+    import uvicorn
+
+    app = build_dual_transport_app(mcp)
+    config = uvicorn.Config(
+        app,
+        host=mcp.settings.host,
+        port=mcp.settings.port,
+        log_level=mcp.settings.log_level.lower(),
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
+def read_transport_from_env() -> Transport:
+    transport = os.getenv("MCP_TRANSPORT", "sse").strip() or "sse"
+    if transport not in VALID_TRANSPORTS:
+        raise ValueError("MCP_TRANSPORT must be sse, streamable-http, or both")
+    return cast(Transport, transport)
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     mcp, _client = build_server()
-    transport = os.getenv("MCP_TRANSPORT", "sse").strip() or "sse"
-    if transport not in {"sse", "streamable-http"}:
-        raise ValueError("MCP_TRANSPORT must be sse or streamable-http")
+    transport = read_transport_from_env()
     log.info(
         "starting IP-MCP on %s:%s (transport=%s)",
         os.getenv("MCP_HOST", "0.0.0.0"),
         os.getenv("MCP_PORT", "8765"),
         transport,
     )
-    mcp.run(transport=transport)
+    if transport == "both":
+        import anyio
+
+        anyio.run(lambda: run_dual_transport_async(mcp))
+    else:
+        mcp.run(transport=cast(FastMcpTransport, transport))
 
 
 if __name__ == "__main__":

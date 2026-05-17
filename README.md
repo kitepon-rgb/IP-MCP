@@ -117,14 +117,17 @@ Claude Desktop / Code 設定:
 ```
 
 Codex CLI の direct HTTP MCP (`codex mcp add --url`) は Streamable HTTP を前提にするため、
-Codex から直接使うデプロイでは `MCP_TRANSPORT=streamable-http` で起動し、URL は `/mcp` を登録します。
+Codex から直接使うデプロイでは URL は `/mcp` を登録します。
 
 ```bash
 CODEX_HOME=/path/to/codex-home codex mcp add ip-mcp --url https://<your-subdomain>.example.com/mcp
 CODEX_HOME=/path/to/codex-home codex mcp login ip-mcp
 ```
 
-SSE クライアントでは `MCP_TRANSPORT=sse` (default) のまま `/sse` を登録します。
+SSE クライアントでは `/sse` を登録します。
+Codex direct HTTP と SSE クライアントを同じ公開サーバーで併用する場合は、
+`MCP_TRANSPORT=both` で起動すると `/mcp` と `/sse` の両方を同じ OAuth 設定で提供できます。
+単一クライアントだけなら `MCP_TRANSPORT=sse` (default) または `MCP_TRANSPORT=streamable-http` も利用できます。
 
 ### iPhone Claude / claude.ai (公開、OAuth 2.1)
 
