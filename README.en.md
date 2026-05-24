@@ -46,9 +46,11 @@ The official JPO API is **number-lookup only** — every one of its 42 endpoints
 ```mermaid
 flowchart LR
     User["Claude Desktop /<br/>Claude Code /<br/>iPhone Claude"]
-    Caddy["Caddy<br/>(Let's Encrypt)"]
+    CF["Cloudflare<br/>(Edge TLS + Tunnel)"]
+    Caddy["Caddy<br/>(CF Origin Cert)"]
 
-    User -->|"HTTPS + OAuth"| Caddy
+    User -->|"HTTPS + OAuth"| CF
+    CF -->|"outbound from home<br/>via cloudflared"| Caddy
     Caddy -->|"http+SSE"| MCP
 
     subgraph Docker["Docker container (Python 3.12 + FastMCP)"]
@@ -80,7 +82,7 @@ docker compose up -d --build
 
 For LAN-wide deployment, create `docker-compose.override.yml` to bind to your LAN interface, then point SSE clients at `http://<HOST>:8765/sse`. Codex direct HTTP MCP clients use `/mcp`; set `MCP_TRANSPORT=both` when one deployment must serve both `/mcp` and `/sse`.
 
-For public exposure (iPhone Claude / claude.ai), set up a reverse proxy with Let's Encrypt and supply both `MCP_OAUTH_MASTER_PASSWORD` and `MCP_OAUTH_ISSUER_URL`. The server requires OAuth 2.1 (DCR + PKCE + master-password consent). Issued tokens persist to SQLite and survive container restarts.
+For public exposure (iPhone Claude / claude.ai), the recommended setup is Cloudflare Tunnel + Caddy (CF Origin Cert) — `cloudflared` dials out from your home network to the CF edge, so no router port forwarding is needed and hairpin NAT is a non-issue. A traditional reverse proxy with Let's Encrypt also works. Either way, supply both `MCP_OAUTH_MASTER_PASSWORD` and `MCP_OAUTH_ISSUER_URL`. The server requires OAuth 2.1 (DCR + PKCE + master-password consent). Issued tokens persist to SQLite and survive container restarts.
 
 See [PLAN.md §9-§10](PLAN.md) and [OPERATIONS.md](OPERATIONS.md) for full deployment + operations details (Japanese only for now).
 

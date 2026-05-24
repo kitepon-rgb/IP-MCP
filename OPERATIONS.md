@@ -121,12 +121,14 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp/logs && mv access.jsonl access-$(date 
    chmod 600 .env  # 念のため
    ```
 
-3. コンテナ再起動（コードは変えていないので `--build` 不要）:
+3. コンテナを作り直し（コードは変えていないので `--build` 不要、ただし `restart` ではなく `up -d` を使う）:
 
    ```bash
-   docker compose restart ip-mcp
-   docker compose logs -f ip-mcp  # 起動ログ確認
+   docker compose up -d ip-mcp     # env_file の再読み込みのためコンテナ再作成が必要
+   docker compose logs -f ip-mcp   # 起動ログ確認
    ```
+
+   ⚠️ `docker compose restart` は **既存コンテナを再起動するだけで env_file を再評価しない**。`.env` を書き換えた場合は必ず `up -d`（コンテナ再作成）を使うこと。
 
 4. 動作確認: 新規クライアントを 1 つ接続して認可フローを通し、新パスワードで通ることを確認。
 
@@ -162,8 +164,9 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --
 
 1. コンテナのヘルスチェック: `docker compose ps` で `healthy` か確認
 2. Caddy のログ: `sudo journalctl -u caddy -n 50`
-3. OAuth エンドポイント疎通: `curl https://ipmcp.<domain>.dynv6.net/.well-known/oauth-authorization-server`
-4. アクセスログ: `tail logs/access.jsonl` で直近のコールを確認
+3. Cloudflare Tunnel の状態: `sudo systemctl status cloudflared` （または `cloudflared tunnel info <tunnel-name>`）
+4. OAuth エンドポイント疎通: `curl https://ipmcp.<domain>/.well-known/oauth-authorization-server` — `issuer` が `https://ipmcp.<domain>/` を返すこと（旧ドメインが返るなら `.env` の `MCP_OAUTH_ISSUER_URL` を確認）
+5. アクセスログ: `tail logs/access.jsonl` で直近のコールを確認
 
 ### 「rate_limited_daily」が出始めた
 
@@ -194,12 +197,10 @@ ssh <SSH_USER>@<DEPLOY_HOST> "cd ~/ip-mcp && git pull && docker compose up -d --
 - 🔄 OPD 2 ツール (`#10, #11`) は今日のクォータが枯渇していたため `rate_limited_daily` の構造化エラー応答までしか確認できず。実データ取得経路の動作は翌日（クォータリセット後）に再テスト必要
 - 🔄 OAuth SQLite 永続化の「再起動後もトークン生存」は、今回のデプロイがメモリ持ちトークンの最後の消失イベント（旧コード→新コードへの切替時）。次回以降の再起動・再ビルドでトークン生存を確認できる
 
-### LAN 内 PC から `https://ipmcp.<domain>.dynv6.net` で繋がらない
+### LAN 内 PC から `https://ipmcp.<domain>` で繋がらない
 
-ヘアピン NAT が無効。Windows の `C:\Windows\System32\drivers\etc\hosts` に LAN 直結エントリを追加（管理者権限が必要）:
+Cloudflare Tunnel 経由のため、LAN 内/外を問わず CF エッジ経由でアクセスする方式。ヘアピン NAT 関連の問題は構造上発生しない。LAN 内 PC から繋がらない場合の原因は:
 
-```
-<DEPLOY_HOST>    ipmcp.<domain>.dynv6.net
-```
-
-その後 `ipconfig /flushdns` で DNS キャッシュをクリア。
+1. **DNS 解決失敗**: `nslookup ipmcp.<domain>` で Cloudflare の IP (104.x / 172.x 帯) が返るか確認。返らない場合はクライアント側 DNS の問題（社内 DNS 等が CF レコードをブロックしている）。
+2. **CF Tunnel ダウン**: 上記「iPhone Claude から繋がらない」の項 3 を確認。
+3. **OAuth issuer の不整合**: 旧ドメイン (`.dynv6.net`) で発行したトークンを保持しているクライアントを新ドメインで使うと不整合になる。クライアント側の登録を新ドメインで作り直す。

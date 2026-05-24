@@ -54,10 +54,12 @@ Claude にこう聞ける（裏で MCP ツールが連鎖実行）:
 ```mermaid
 flowchart LR
     User["Claude Desktop /<br/>Claude Code /<br/>iPhone Claude"]
-    Caddy["Caddy<br/>(Let's Encrypt)"]
+    CF["Cloudflare<br/>(Edge TLS + Tunnel)"]
+    Caddy["Caddy<br/>(CF Origin Cert)"]
     OAuth["OAuth 2.1<br/>(SQLite-backed)"]
 
-    User -->|"HTTPS + OAuth"| Caddy
+    User -->|"HTTPS + OAuth"| CF
+    CF -->|"outbound from home<br/>via cloudflared"| Caddy
     Caddy -->|"http+SSE"| MCP
 
     subgraph Docker["Docker container (Python 3.12 + FastMCP)"]
@@ -131,7 +133,7 @@ Codex direct HTTP と SSE クライアントを同じ公開サーバーで併用
 
 ### iPhone Claude / claude.ai (公開、OAuth 2.1)
 
-リバースプロキシで HTTPS + サブドメイン公開し、`MCP_OAUTH_MASTER_PASSWORD` + `MCP_OAUTH_ISSUER_URL` をセット。OAuth 2.1 (DCR + PKCE + マスターパスワード認可) を要求します。クライアントトークンは SQLite に永続化されコンテナ再起動でも生き残り。
+公開には Cloudflare Tunnel + Caddy (CF Origin Cert) 構成を推奨します（ホームルーターのポート開放不要、ヘアピン NAT 問題も発生しない）。Let's Encrypt + 直接 443 公開でも動きます。いずれの場合も `MCP_OAUTH_MASTER_PASSWORD` + `MCP_OAUTH_ISSUER_URL` をセットして OAuth 2.1 (DCR + PKCE + マスターパスワード認可) を有効化します。クライアントトークンは SQLite に永続化されコンテナ再起動でも生き残り。
 
 ```env
 MCP_OAUTH_MASTER_PASSWORD=<24+ chars random>

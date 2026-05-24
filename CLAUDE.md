@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `Dockerfile` / `docker-compose.yml` — `./cache`, `./logs`, `./data` の 3 ボリューム
 - `tests/` — 45 テスト、全緑
 
-公開構成: `ipmcp.<domain>.dynv6.net` (Caddy + Let's Encrypt) → `<DEPLOY_HOST>:8765` → Docker コンテナ。同 LAN 内からは Windows hosts に `<DEPLOY_HOST> ipmcp.<domain>.dynv6.net` を入れることでヘアピン NAT を回避。
+公開構成: `ipmcp.<domain>` → Cloudflare Edge → Cloudflare Tunnel (`cloudflared` が自宅から outbound) → Caddy (CF Origin Cert で end-to-end TLS) → `<DEPLOY_HOST>:8765` → Docker コンテナ。CF Tunnel が outbound 接続でエッジに繋がる方式のため、ホームルーターのポート開放もヘアピン NAT 回避も不要。LAN 内/外を問わず CF エッジ経由で同じ URL に届く。
 
 **Phase 1.5 完了**: OAuth 永続化 / ヘアピン NAT 回避 / アクセスログ JSONL (`logs/access.jsonl`) + 集計スクリプト (`scripts/summarize_logs.py`) / マスターパスワード rotate 手順 ([OPERATIONS.md](OPERATIONS.md))。
 **Phase 2 (未着手)**: 拒絶理由通知書 PDF 構造化、AI レビューパイプライン、EPO OPS / WIPO PATENTSCOPE 補完。
