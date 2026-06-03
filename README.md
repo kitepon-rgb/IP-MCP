@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/og.png" alt="IP-MCP — JPO 特許情報取得 API → MCP サーバー" width="100%">
+  <img src=".github/og.png" alt="IP-MCP — Japan Patent Office API as MCP server" width="100%">
 </p>
 
 # IP-MCP
@@ -8,55 +8,60 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-1.2+-green.svg)](https://modelcontextprotocol.io/)
 [![CI](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/kitepon-rgb/IP-MCP?color=24292e&logo=github)](https://github.com/kitepon-rgb/IP-MCP/releases)
 
-> **特許庁の公式「特許情報取得API」を MCP サーバー化して、Claude Desktop / Claude Code / iPhone Claude から自然言語で日本特許を引く。**
->
-> 番号変換・経過情報・登録情報・引用文献・出願人検索・五庁ファミリー (OPD)、合計 12 ツール（公式）+ 1 ツール（Google Patents キーワード検索、独立分離）。
+**English** · [日本語](README.ja.md)
 
-🇬🇧 English: [README.en.md](README.en.md)
-
----
-
-## 30 秒で何ができるか
-
-Claude にこう聞ける（裏で MCP ツールが連鎖実行）:
-
-> **ユーザー**: 「特開2010-228687 の登録状況と引用文献を教えて」
->
-> **Claude (内部動作)**:
-> 1. `jpo_convert_patent_number` で公開番号→出願番号 (`2009080841`)
-> 2. `jpo_get_patent_registration` で登録情報 (登録 5094774、株式会社日立製作所、満了 2029-03-30、権利存続中)
-> 3. `jpo_get_patent_citations` で引用文献 20 件
->
-> **回答**: 「列車制御地上装置およびシステム」(株式会社日立) は登録番号 5094774 として 2012-09-28 に登録、現在も権利存続中、満了予定 2029-03-30。引用文献は 20 件、検索報告書 / 拒絶理由から特許文献のみ（非特許文献なし）...
-
-キーワード検索は外部ツール (`external_search_patents_by_keyword`) で **明示的に分離**。LLM が「公式データ」と「参考データ」を取り違えないよう、レスポンスの `source` フィールドで識別を強制。
+> **Query Japanese patents in natural language from Claude.**
+> IP-MCP wraps the Japan Patent Office's official "Patent Information Retrieval API" as an MCP server, so Claude Desktop, Claude Code, and iPhone Claude can resolve patent numbers, check registration status, pull citations, and walk five-office families — 12 official-API tools plus 1 deliberately isolated keyword-search tool.
 
 ---
 
-## 既存手段との比較
+## What you can ask Claude in 30 seconds
 
-| 比較項目 | J-PlatPat (Web UI 手動) | 既存 Flask 自作 | **IP-MCP** | Google Patents 直叩き |
+> **You**: "Tell me the registration status and prior art of JP-2010-228687."
+>
+> **Claude (under the hood)**:
+> 1. `jpo_convert_patent_number` → application number `2009080841`
+> 2. `jpo_get_patent_registration` → registration 5094774, Hitachi Ltd., expires 2029-03-30, alive
+> 3. `jpo_get_patent_citations` → 20 prior-art references
+>
+> **Reply**: "Train Control Ground Equipment and System" (Hitachi Ltd.) was registered as JP5094774 on 2012-09-28, currently in force, due 2029-03-30. 20 prior-art citations from search report and rejection grounds, all patent literature (no NPL)…
+
+Keyword search is split into a **separate tool** (`external_search_patents_by_keyword`, Google Patents XHR). The LLM can never accidentally fall back from the official API to the unofficial source — every response carries an explicit `source` field.
+
+---
+
+## How it compares
+
+| | J-PlatPat (manual web UI) | Hand-rolled Flask wrapper | **IP-MCP** | Hitting Google Patents directly |
 |---|---|---|---|---|
-| データソース | 公式 (JPO) | 公式 (JPO) | 公式 (JPO) + 外部 (オプション) | 非公式 |
-| 番号変換・経過・登録・引用 | ✓ (人手) | ✓ | ✓ | ❌ |
-| キーワード検索 | ✓ | ✓ | △ (外部ツールに分離) | ✓ |
-| LLM から直接呼び出し | ❌ | ❌ (REST 経由 + パース要) | ✅ ネイティブ MCP | △ (HTML/JSON パース要) |
-| 公式 / 非公式の区別 | — | 単一ソース | ✅ レスポンスに `source` 必須 | — |
-| 自動フォールバック | — | — | ❌ 禁止 (LLM に判断させる) | — |
-| 認証 | セッション | env | env or OAuth 2.1 (DCR + PKCE) | 不要 |
-| デプロイ | — | 自前 | Docker Compose | — |
+| Data source | Official (JPO) | Official (JPO) | Official (JPO) + external (optional) | Unofficial |
+| Number convert / progress / registration / citations | ✓ (by hand) | ✓ | ✓ | ❌ |
+| Keyword search | ✓ | ✓ | △ (isolated external tool) | ✓ |
+| Callable directly from an LLM | ❌ | ❌ (REST + parsing needed) | ✅ native MCP | △ (HTML/JSON parsing needed) |
+| Official vs. unofficial distinction | — | single source | ✅ mandatory `source` field | — |
+| Automatic fallback | — | — | ❌ forbidden (the LLM decides) | — |
+| Auth | session | env | env or OAuth 2.1 (DCR + PKCE) | none |
+| Deploy | — | DIY | Docker Compose | — |
+
+### Why a separate tool category for keyword search?
+
+The official JPO API is **number-lookup only** — every endpoint takes an application / publication / registration number, an applicant code, or an **exact-match** applicant name. Keyword / IPC / F-term / date-range / partial-name search does not exist in the spec. So:
+
+- `tools_official/` — names start with `jpo_*`, response is `{"source": "jpo_official", …}`
+- `tools_external/` — names start with `external_*`, response is `{"source": "google_patents_unofficial", …}`
+- A boundary test forbids any `import` from `tools_external/` into `tools_official/`. **No silent fallback** — the LLM decides whether to consult the unofficial source.
 
 ---
 
-## アーキテクチャ
+## Architecture
 
 ```mermaid
 flowchart LR
     User["Claude Desktop /<br/>Claude Code /<br/>iPhone Claude"]
     CF["Cloudflare<br/>(Edge TLS + Tunnel)"]
     Caddy["Caddy<br/>(CF Origin Cert)"]
-    OAuth["OAuth 2.1<br/>(SQLite-backed)"]
 
     User -->|"HTTPS + OAuth"| CF
     CF -->|"outbound from home<br/>via cloudflared"| Caddy
@@ -66,156 +71,154 @@ flowchart LR
       MCP["MCP server<br/>:8765"]
       Official["tools_official/<br/>(jpo_* 12 tools)"]
       External["tools_external/<br/>(external_* 1 tool)"]
+      OAuth["OAuth 2.1<br/>SQLite-backed"]
       MCP --> Official
       MCP --> External
       MCP -.->|"persisted"| OAuth
     end
 
-    Official -->|"OAuth2 password grant"| JPO[("JPO 特許情報取得API")]
+    Official -->|"OAuth2 password grant"| JPO[("JPO Patent API")]
     External -->|"3s spacing + 503 backoff"| GP[("Google Patents XHR")]
 
     classDef boundary stroke-dasharray: 5 5
     class External,GP boundary
 ```
 
-**架構の核**:
-- `tools_official/` (公式 JPO) と `tools_external/` (非公式 Google Patents) は **コード階層・呼び出し元・ロガー完全分離**。`tools_official/` から `tools_external/` への `import` を boundary test で禁止
-- 同一データソース内の再試行のみ許可 (401→トークン更新 / 303→指数バックオフ)。失敗時の自動フォールバック禁止 — LLM に判断させる
-- レスポンスは必ず `{"source": "jpo_official"}` または `{"source": "google_patents_unofficial"}`
+**Core design rules:**
+- `tools_official/` (official JPO) and `tools_external/` (unofficial Google Patents) are **fully separated** at the code-hierarchy, call-site, and logger level. A boundary test blocks any `import` from `tools_external/` into `tools_official/`.
+- Retry is allowed only **within the same data source** (401 → token refresh; 303 → exponential backoff). Automatic cross-source fallback on failure is forbidden — the LLM decides.
+- Every response carries `{"source": "jpo_official"}` or `{"source": "google_patents_unofficial"}`.
 
 ---
 
-## クイックスタート
+## Quick start
 
-### ローカル開発
+### Local development
 
 ```bash
-cp .env.example .env          # JPO_USERNAME / JPO_PASSWORD を記入
+cp .env.example .env          # Fill in JPO_USERNAME / JPO_PASSWORD
 chmod 600 .env
 docker compose up -d --build
 ```
 
-### LAN デプロイ (no-auth)
+### LAN deployment (no-auth)
 
-`docker-compose.override.yml` を作成して LAN IP にバインド (リポジトリには `docker-compose.override.yml.example` あり):
+Create `docker-compose.override.yml` to bind to your LAN interface (the repo ships a `docker-compose.override.yml.example`):
 
 ```yaml
 services:
   ip-mcp:
     ports:
-      - "192.0.2.10:8765:8765"   # 自分の LAN IP
+      - "YOUR_SERVER_IP:8765:8765"   # your LAN IP
 ```
 
-Claude Desktop / Code 設定:
+Claude Desktop / Code config:
 
 ```json
 {
   "mcpServers": {
     "ip-mcp": {
-      "transport": { "type": "sse", "url": "http://192.0.2.10:8765/sse" }
+      "transport": { "type": "sse", "url": "http://YOUR_SERVER_IP:8765/sse" }
     }
   }
 }
 ```
 
-Codex CLI の direct HTTP MCP (`codex mcp add --url`) は Streamable HTTP を前提にするため、
-Codex から直接使うデプロイでは URL は `/mcp` を登録します。
+Codex CLI's direct HTTP MCP (`codex mcp add --url`) expects Streamable HTTP, so register the `/mcp` path when using it directly from Codex:
 
 ```bash
-CODEX_HOME=/path/to/codex-home codex mcp add ip-mcp --url https://<your-subdomain>.example.com/mcp
+CODEX_HOME=/path/to/codex-home codex mcp add ip-mcp --url https://your-host.example.com/mcp
 CODEX_HOME=/path/to/codex-home codex mcp login ip-mcp
 ```
 
-SSE クライアントでは `/sse` を登録します。
-Codex direct HTTP と SSE クライアントを同じ公開サーバーで併用する場合は、
-`MCP_TRANSPORT=both` で起動すると `/mcp` と `/sse` の両方を同じ OAuth 設定で提供できます。
-単一クライアントだけなら `MCP_TRANSPORT=sse` (default) または `MCP_TRANSPORT=streamable-http` も利用できます。
+SSE clients register `/sse`. To serve Codex direct HTTP and SSE clients from the same public server, start with `MCP_TRANSPORT=both` to expose both `/mcp` and `/sse` under the same OAuth config. For a single client, `MCP_TRANSPORT=sse` (default) or `MCP_TRANSPORT=streamable-http` also works.
 
-### iPhone Claude / claude.ai (公開、OAuth 2.1)
+### iPhone Claude / claude.ai (public, OAuth 2.1)
 
-公開には Cloudflare Tunnel + Caddy (CF Origin Cert) 構成を推奨します（ホームルーターのポート開放不要、ヘアピン NAT 問題も発生しない）。Let's Encrypt + 直接 443 公開でも動きます。いずれの場合も `MCP_OAUTH_MASTER_PASSWORD` + `MCP_OAUTH_ISSUER_URL` をセットして OAuth 2.1 (DCR + PKCE + マスターパスワード認可) を有効化します。クライアントトークンは SQLite に永続化されコンテナ再起動でも生き残り。
+For public exposure the recommended setup is Cloudflare Tunnel + Caddy (CF Origin Cert) — `cloudflared` dials out from your home network to the CF edge, so no router port forwarding is needed and hairpin NAT is a non-issue. A traditional reverse proxy with Let's Encrypt + direct 443 also works. Either way, set `MCP_OAUTH_MASTER_PASSWORD` + `MCP_OAUTH_ISSUER_URL` to enable OAuth 2.1 (DCR + PKCE + master-password consent). Issued client tokens persist to SQLite and survive container restarts.
 
 ```env
 MCP_OAUTH_MASTER_PASSWORD=<24+ chars random>
-MCP_OAUTH_ISSUER_URL=https://<your-subdomain>.example.com
-# 任意: MCP_OAUTH_DB_PATH=/app/data/oauth.db
+MCP_OAUTH_ISSUER_URL=https://your-host.example.com
+# optional: MCP_OAUTH_DB_PATH=/app/data/oauth.db
 ```
 
-詳細は [PLAN.md §9-§10](PLAN.md) と [OPERATIONS.md](OPERATIONS.md)。
+See [PLAN.md §9-§10](PLAN.md) and [OPERATIONS.md](OPERATIONS.md) for full deployment + operations details (Japanese for now).
 
 ---
 
-## 公開ツール一覧
+## Tool list
 
 <details>
-<summary><b>公式 JPO API ベース (12 ツール)</b> — クリックで展開</summary>
+<summary><b>Official JPO API tools (12)</b> — click to expand</summary>
 
-| ツール名 | 役割 |
+| Name | Purpose |
 |---|---|
-| `jpo_convert_patent_number` | 出願⇄公開⇄登録 番号変換 |
-| `jpo_get_patent_progress` | 経過情報 (フル / シンプル切替) |
-| `jpo_get_patent_registration` | 登録情報・権利状態 |
-| `jpo_get_patent_citations` | 引用文献一覧 |
-| `jpo_get_divisional_apps` | 分割出願情報 |
-| `jpo_get_priority_apps` | 優先基礎出願情報 |
-| `jpo_lookup_applicant` | 出願人名⇄コード（**完全一致のみ**）|
-| `jpo_get_patent_documents` | 申請書類 / 拒絶理由 / 発送書類（binary ZIP / signed URL 両対応）|
-| `jpo_get_jpp_url` | J-PlatPat 固定 URL 生成 |
-| `jpo_get_opd_family` | 五庁ファミリー (USPTO/EPO/CNIPA/KIPO) |
-| `jpo_get_opd_doc_list` | OPD 書類リスト |
-| `jpo_fetch_full_record` | 同一番号で複数ツールを束ねた高位コンポジット (公式 API 内のみで完結) |
+| `jpo_convert_patent_number` | Convert between application / publication / registration numbers |
+| `jpo_get_patent_progress` | Examination progress (full / simple toggle) |
+| `jpo_get_patent_registration` | Registration info & right status |
+| `jpo_get_patent_citations` | Cited prior-art documents |
+| `jpo_get_divisional_apps` | Divisional applications |
+| `jpo_get_priority_apps` | Priority-basis applications |
+| `jpo_lookup_applicant` | Applicant code ⇄ name (**exact match only**) |
+| `jpo_get_patent_documents` | Office actions / refusal reasons / amendments (handles inline ZIP + signed URL) |
+| `jpo_get_jpp_url` | J-PlatPat canonical URL |
+| `jpo_get_opd_family` | Five-office patent family (JPO / USPTO / EPO / CNIPA / KIPO) |
+| `jpo_get_opd_doc_list` | OPD document list |
+| `jpo_fetch_full_record` | High-level composite fanning out to multiple official endpoints (stays entirely within the official API) |
 
-レスポンス: `{"ok": true, "source": "jpo_official", "data": {...}, "remaining_today": "..."}`
+Response: `{"ok": true, "source": "jpo_official", "data": {…}, "remaining_today": "…"}`
 
 </details>
 
 <details>
-<summary><b>外部キーワード検索 (1 ツール、独立分離)</b> — クリックで展開</summary>
+<summary><b>External keyword search (1, isolated)</b> — click to expand</summary>
 
-| ツール名 | 役割 |
+| Name | Purpose |
 |---|---|
-| `external_search_patents_by_keyword` | 自然語キーワード / 出願人 / IPC / 日付レンジで日本特許検索 (Google Patents XHR、参考用) |
+| `external_search_patents_by_keyword` | Free-text / assignee / IPC / date-range search of Japanese patents (Google Patents XHR, reference use) |
 
-レスポンス: `{"ok": true, "source": "google_patents_unofficial", "data": {...}}`
+Response: `{"ok": true, "source": "google_patents_unofficial", "data": {…}}`
 
-公式 API はキーワード検索を提供しない（番号ルックアップ型のみ）ため独立。失敗時は `{"ok": false, "kind": "search_unavailable"}` を返し、**公式ツールに自動フォールバックしない**。
+Isolated because the official API offers no keyword search (number-lookup only). On failure it returns `{"ok": false, "kind": "search_unavailable"}` and **never falls back to an official tool**.
 
 </details>
 
 ---
 
-## レート制約（運用上の注意）
+## Rate limits (operations)
 
-JPO 公式 API は自主制御責任を運用者に課している:
+The official JPO API delegates self-throttling responsibility to the operator:
 
-- 分次レート: `/api/patent/*` は **10 req/min**、`/opdapi/*` は **5 req/min**（OPD は別系統で別カウント）
-- 日次クォータ: エンドポイントごとに 30〜800/日（2026 年 3 月から国内系は 2 倍緩和済）。実残量は各レスポンスの `result.remainAccessCount` が信頼ソース
-- `jpo_fetch_full_record` は内部で **4 つの公式エンドポイントを並列**で叩くため、1 コール = 4 つの別々の日次クォータから 1 ずつ消費する（同一クォータから 4 ではない）
+- **Per-minute rate**: `/api/patent/*` is **10 req/min**, `/opdapi/*` is **5 req/min** (OPD is counted separately on its own bucket).
+- **Daily quota**: 30–800/day per endpoint (national-API quotas were doubled in March 2026). The authoritative live counter is `result.remainAccessCount`, returned on every response.
+- `jpo_fetch_full_record` fans out to **4 official endpoints in parallel**, so one call consumes 1 unit from each of 4 separate daily quotas (not 4 from the same quota). The bottleneck is whichever quota is lowest.
 
-ツールごとのエンドポイント対応表と、運用上の閾値の感覚は [OPERATIONS.md §JPO API レート制約とクォータ](OPERATIONS.md#jpo-api-レート制約とクォータ) を参照。
+For the tool-to-endpoint mapping and operational thresholds, see [OPERATIONS.md §JPO API レート制約とクォータ](OPERATIONS.md#jpo-api-レート制約とクォータ) (Japanese).
 
 ---
 
-## ドキュメント
+## Docs
 
-- 📐 [PLAN.md](PLAN.md) — 設計計画書（アーキテクチャ・全ツール一覧・段階計画）
-- 🤖 [CLAUDE.md](CLAUDE.md) — Claude Code 向け操作ガイド（譲れない設計規則・JPO API の罠）
-- 🔧 [OPERATIONS.md](OPERATIONS.md) — 運用手順（アクセスログ集計・マスターパスワード rotate・トラブルシュート）
+- 📐 [PLAN.md](PLAN.md) — Design plan (architecture, full tool list, phased plan) [JP]
+- 🤖 [CLAUDE.md](CLAUDE.md) — Claude Code guide (non-negotiable design rules, JPO API gotchas) [JP]
+- 🔧 [OPERATIONS.md](OPERATIONS.md) — Operations runbook (access-log summary, master-password rotation, troubleshooting) [JP]
 
 ---
 
 <details>
-<summary>プレースホルダの読み替え（Public リポジトリのため LAN IP / SSH ユーザー名はマスク）</summary>
+<summary>Reading the placeholders (LAN IP / SSH user are masked because this is a public repo)</summary>
 
-| プレースホルダ | 例 | 設定方法 |
+| Placeholder | Example | How to set |
 |---|---|---|
-| `<DEPLOY_HOST>` | `192.0.2.10` | デプロイ先サーバーの LAN IP |
-| `<SSH_USER>` | `alice` | サーバーの SSH ユーザー名 |
+| `YOUR_SERVER_IP` | `192.0.2.10` | LAN IP of your deployment host |
+| `<SSH_USER>` | `youruser` | SSH username on the host |
+| `your-host.example.com` | your own domain | public hostname behind Cloudflare / your reverse proxy |
 
-`docker-compose.yml` のポートバインドはデフォルト `127.0.0.1:8765` (= 同マシンからのみ)。LAN 公開する場合は `docker-compose.override.yml` を別途作成 (`.gitignore` 済) して上書きしてください。
+The port binding in `docker-compose.yml` defaults to `127.0.0.1:8765` (same-machine only). To expose on the LAN, create a separate `docker-compose.override.yml` (already gitignored) to override it.
 
 </details>
 
-## ライセンス
+## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
