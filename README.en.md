@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-1.2+-green.svg)](https://modelcontextprotocol.io/)
+[![CI](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml)
 
 > **MCP server wrapping the Japan Patent Office's official "Patent Information Retrieval API" so Claude Desktop / Claude Code / iPhone Claude can query Japanese patents in natural language.**
 >
