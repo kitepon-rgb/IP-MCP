@@ -7,8 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-1.2+-green.svg)](https://modelcontextprotocol.io/)
-[![CI](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/kitepon-rgb/IP-MCP/actions/workflows/ci.yml)
-[![GitHub release](https://img.shields.io/github/v/release/kitepon-rgb/IP-MCP?color=24292e&logo=github)](https://github.com/kitepon-rgb/IP-MCP/releases)
+[![CI](https://github.com/kitepon/IP-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/kitepon/IP-MCP/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/kitepon/IP-MCP?color=24292e&logo=github)](https://github.com/kitepon/IP-MCP/releases)
 
 [English](README.md) · **日本語**
 
